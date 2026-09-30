@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Contact Management System</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto; padding: 0 10px; }
+    input { padding: 6px; margin: 4px 4px 4px 0; }
+    button { padding: 6px 12px; margin: 2px; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; font-size: 14px; }
+    pre { background: #f4f4f4; padding: 10px; overflow-x: auto; }
+    .err { color: #b00020; }
+  </style>
+</head>
+<body>
+  <h1>Contact Management System</h1>
+
+  <h3 id="formTitle">Add contact</h3>
+  <input id="name" placeholder="Name *">
+  <input id="phone" placeholder="Phone (10 digits) *" maxlength="10">
+  <input id="email" placeholder="Email">
+  <button onclick="save()">Save</button>
+  <button onclick="resetForm()">Clear</button>
+
+  <h3>Contacts</h3>
+  <button onclick="loadContacts()">Refresh list</button>
+  <table>
+    <thead><tr><th>Contact ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Actions</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <h3>Last API response</h3>
+  <pre id="log">-</pre>
+
+  <script>
+    const API = "/api/contacts";
+    let editingId = null;
+
+    function show(status, data) {
+      document.getElementById("log").textContent = status + "\n" + JSON.stringify(data, null, 2);
+    }
+
+    async function call(method, url, body) {
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        const data = await res.json();
+        show(method + " " + url + " -> " + res.status, data);
+        return data;
+      } catch (e) {
+        show("Network error", { error: e.message });
+      }
+    }
+
+    async function loadContacts() {
+      const data = await call("GET", API);
+      const rows = document.getElementById("rows");
+      rows.innerHTML = "";
+      if (!data || !data.data) return;
+      data.data.forEach((c) => {
+        const tr = document.createElement("tr");
+        [c.contactId, c.name, c.phone, c.email || ""].forEach((v) => {
+          const td = document.createElement("td");
+          td.textContent = v;
+          tr.appendChild(td);
+        });
+        const actions = document.createElement("td");
+        const view = document.createElement("button");
+        view.textContent = "View";
+        view.onclick = () => call("GET", API + "/" + c.contactId);
+        const edit = document.createElement("button");
+        edit.textContent = "Edit";
+        edit.onclick = () => startEdit(c);
+        const del = document.createElement("button");
+        del.textContent = "Delete";
+        del.onclick = async () => {
+          if (confirm("Delete " + c.name + "?")) {
+            await call("DELETE", API + "/" + c.contactId);
+            loadContacts();
+          }
+        };
+        actions.append(view, edit, del);
+        tr.appendChild(actions);
+        rows.appendChild(tr);
+      });
+    }
+
+    function startEdit(c) {
+      editingId = c.contactId;
+      document.getElementById("name").value = c.name;
+      document.getElementById("phone").value = c.phone;
+      document.getElementById("email").value = c.email || "";
+      document.getElementById("formTitle").textContent = "Edit contact (" + c.contactId + ")";
+    }
+
+    function resetForm() {
+      editingId = null;
+      ["name", "phone", "email"].forEach((id) => (document.getElementById(id).value = ""));
+      document.getElementById("formTitle").textContent = "Add contact";
+    }
+
+    async function save() {
+      const body = {
+        name: document.getElementById("name").value,
+        phone: document.getElementById("phone").value,
+        email: document.getElementById("email").value,
+      };
+      const data = editingId
+        ? await call("PUT", API + "/" + editingId, body)
+        : await call("POST", API, body);
+      if (data && data.success) {
+        resetForm();
+        loadContacts();
+      }
+    }
+
+    loadContacts();
+  </script>
+</body>
+</html>
